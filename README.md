@@ -23,7 +23,7 @@
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/你的用户名/cloth_demo.git
+git clone https://github.com/mliml/cloth_demo.git
 cd cloth_demo
 
 # 2. 安装依赖
