@@ -29,6 +29,7 @@ const emit = defineEmits([
 
 const fileInput = ref(null)
 const removeBgFileInput = ref(null)
+const alphaThreshold = ref(200) // Alpha 阈值，越高越严格
 
 // 触发普通上传
 function triggerUpload() {
@@ -73,6 +74,7 @@ async function handleRemoveBgFileChange(event) {
       // 创建 FormData 上传图片
       const formData = new FormData()
       formData.append('image', file)
+      formData.append('alphaThreshold', alphaThreshold.value.toString())
 
       emit('set-processing', true, '正在处理图片（服务器抠图中）...')
 
@@ -83,8 +85,14 @@ async function handleRemoveBgFileChange(event) {
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || '服务器处理失败')
+        let errorMsg = '服务器处理失败'
+        try {
+          const error = await response.json()
+          errorMsg = error.error || errorMsg
+        } catch {
+          errorMsg = `服务器错误 (${response.status})`
+        }
+        throw new Error(errorMsg)
       }
 
       // 获取处理后的图片
@@ -127,6 +135,19 @@ function onDragEnd() {
         <button class="upload-btn remove-bg" @click="triggerRemoveBgUpload" :disabled="isProcessing">
           + 上传并抠图
         </button>
+      </div>
+      <div class="threshold-control">
+        <label>
+          抠图精度: {{ alphaThreshold }}
+          <span class="hint">(越高碎片越少，但可能丢失细节)</span>
+        </label>
+        <input
+          type="range"
+          v-model.number="alphaThreshold"
+          min="128"
+          max="255"
+          step="1"
+        />
       </div>
       <input
         ref="fileInput"
@@ -225,6 +246,27 @@ function onDragEnd() {
 
 .upload-btn.remove-bg:hover:not(:disabled) {
   background: #5a4a84;
+}
+
+.threshold-control {
+  margin-top: 12px;
+}
+
+.threshold-control label {
+  display: block;
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 6px;
+}
+
+.threshold-control .hint {
+  font-size: 11px;
+  color: #999;
+}
+
+.threshold-control input[type="range"] {
+  width: 100%;
+  cursor: pointer;
 }
 
 .cloth-list {

@@ -27,9 +27,10 @@ app.use(express.static(path.join(__dirname, 'dist')))
 /**
  * 移除小碎片，只保留最大的连通区域
  * @param {Buffer} imageBuffer - 带 Alpha 通道的 PNG 图片
+ * @param {number} alphaThreshold - Alpha 阈值，低于此值视为透明 (128-255)
  * @returns {Promise<Buffer>} - 处理后的图片
  */
-async function removeSmallFragments(imageBuffer) {
+async function removeSmallFragments(imageBuffer, alphaThreshold = 200) {
   const image = sharp(imageBuffer)
   const metadata = await image.metadata()
   const { width, height } = metadata
@@ -50,12 +51,14 @@ async function removeSmallFragments(imageBuffer) {
   // 获取像素的 Alpha 值
   const getAlpha = (idx) => pixels[idx * 4 + 3]
 
+  console.log(`Using alpha threshold: ${alphaThreshold}`)
+
   // 使用 BFS 找出所有连通区域
   const regions = []
   let currentLabel = 0
 
   for (let i = 0; i < totalPixels; i++) {
-    if (visited[i] || getAlpha(i) < 128) continue // 跳过透明像素
+    if (visited[i] || getAlpha(i) < alphaThreshold) continue // 跳过透明像素
 
     currentLabel++
     const region = []
@@ -66,7 +69,7 @@ async function removeSmallFragments(imageBuffer) {
       if (visited[idx]) continue
 
       const alpha = getAlpha(idx)
-      if (alpha < 128) continue // 透明像素不属于任何区域
+      if (alpha < alphaThreshold) continue // 透明像素不属于任何区域
 
       visited[idx] = true
       labels[idx] = currentLabel
@@ -84,7 +87,7 @@ async function removeSmallFragments(imageBuffer) {
       ]
 
       for (const neighbor of neighbors) {
-        if (neighbor >= 0 && !visited[neighbor] && getAlpha(neighbor) >= 128) {
+        if (neighbor >= 0 && !visited[neighbor] && getAlpha(neighbor) >= alphaThreshold) {
           queue.push(neighbor)
         }
       }
@@ -104,24 +107,24 @@ async function removeSmallFragments(imageBuffer) {
     r.pixels.length > max.pixels.length ? r : max
   )
 
-  // 计算阈值：小于总像素的 0.05% 的区域将被删除
-  const minRegionSize = Math.max(100, totalPixels * 0.0005)
-
+  // 只保留最大的连通区域，删除所有其他区域
   console.log(`Found ${regions.length} regions, largest has ${largestRegion.pixels.length} pixels`)
-  console.log(`Minimum region size threshold: ${minRegionSize}`)
 
-  // 创建新的像素数据，只保留大区域
+  // 创建新的像素数据，只保留最大区域
   const newPixels = Buffer.from(pixels)
 
   for (let i = 0; i < totalPixels; i++) {
+    const alpha = getAlpha(i)
     const label = labels[i]
-    if (label === 0) continue // 本来就是透明的
 
-    const region = regions.find(r => r.label === label)
-    if (!region) continue
+    // 低于阈值的像素设为透明
+    if (alpha < alphaThreshold) {
+      newPixels[i * 4 + 3] = 0
+      continue
+    }
 
-    // 如果不是最大区域，且小于阈值，则设为透明
-    if (region !== largestRegion && region.pixels.length < minRegionSize) {
+    // 只保留最大区域，其他全部设为透明
+    if (label !== largestRegion.label) {
       newPixels[i * 4 + 3] = 0 // 设置 Alpha 为 0
     }
   }
@@ -148,12 +151,23 @@ app.post('/api/remove-bg', upload.single('image'), async (req, res) => {
     return res.status(400).json({ error: '请上传图片' })
   }
 
-  console.log(`Received image: ${req.file.originalname}, size: ${req.file.size} bytes`)
+  // 获取 alpha 阈值参数
+  const alphaThreshold = parseInt(req.body.alphaThreshold) || 200
+  console.log(`Received image: ${req.file.originalname}, size: ${req.file.size} bytes, alphaThreshold: ${alphaThreshold}`)
 
   try {
+    // 先用 Sharp 将图片转换为标准 PNG 格式
+    console.log('Converting image to PNG...')
+    const pngBuffer = await sharp(req.file.buffer)
+      .png()
+      .toBuffer()
+
+    // 转换为 Blob（库需要 Blob 格式）
+    const inputBlob = new Blob([pngBuffer], { type: 'image/png' })
+
     // 使用 AI 模型移除背景
     console.log('Starting background removal...')
-    const blob = await removeBackground(req.file.buffer, {
+    const blob = await removeBackground(inputBlob, {
       model: 'small',
       output: {
         format: 'image/png'
@@ -168,7 +182,7 @@ app.post('/api/remove-bg', upload.single('image'), async (req, res) => {
 
     // 后处理：移除小碎片
     console.log('Removing small fragments...')
-    resultBuffer = await removeSmallFragments(resultBuffer)
+    resultBuffer = await removeSmallFragments(resultBuffer, alphaThreshold)
 
     console.log(`Fragments removed, final size: ${resultBuffer.length} bytes`)
 
@@ -191,7 +205,7 @@ app.get('/api/health', (req, res) => {
 })
 
 // 所有其他路由返回 index.html（SPA 支持）
-app.get('*', (req, res) => {
+app.get('/{*splat}', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'))
 })
 
