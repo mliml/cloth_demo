@@ -1,7 +1,6 @@
 <script setup>
 import { ref } from 'vue'
 import draggable from 'vuedraggable'
-import { removeBackground } from '@imgly/background-removal'
 import ClothItem from './ClothItem.vue'
 
 const props = defineProps({
@@ -60,30 +59,36 @@ function handleFileChange(event) {
   event.target.value = ''
 }
 
-// 处理抠图上传
+// 处理抠图上传 - 调用服务器端 API
 async function handleRemoveBgFileChange(event) {
   const files = event.target.files
   if (!files || files.length === 0) return
 
-  emit('set-processing', true, '正在加载模型...')
+  emit('set-processing', true, '正在上传图片...')
 
   try {
     for (const file of files) {
       if (!file.type.startsWith('image/')) continue
 
-      // 移除背景，使用本地模型（版本 1.4.5）
-      const blob = await removeBackground(file, {
-        publicPath: `${window.location.origin}/bg-removal-data/`,
-        model: 'small',
-        progress: (key, current, total) => {
-          if (key.includes('fetch')) {
-            const percent = Math.round((current / total) * 100)
-            emit('set-processing', true, `正在加载资源: ${percent}%`)
-          } else if (key.includes('compute')) {
-            emit('set-processing', true, '正在处理图片...')
-          }
-        }
+      // 创建 FormData 上传图片
+      const formData = new FormData()
+      formData.append('image', file)
+
+      emit('set-processing', true, '正在处理图片（服务器抠图中）...')
+
+      // 调用服务器端抠图 API
+      const response = await fetch('/api/remove-bg', {
+        method: 'POST',
+        body: formData
       })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || '服务器处理失败')
+      }
+
+      // 获取处理后的图片
+      const blob = await response.blob()
 
       // 转换为 DataURL
       const dataUrl = await new Promise((resolve) => {

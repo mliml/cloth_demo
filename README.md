@@ -41,18 +41,57 @@ npm run dev
 # 构建生产版本
 npm run build
 
-# 预览构建结果
-npm run preview
+# 启动后端服务（抠图功能需要）
+npm start
 ```
 
-构建产物在 `dist/` 目录，可部署到任意静态服务器。
+服务器将运行在 http://localhost:3000。
+
+### 生产环境部署
+
+抠图功能在服务器端运行，需要启动 Node.js 后端服务：
+
+```bash
+# 安装依赖
+npm install
+
+# 构建前端
+npm run build
+
+# 启动后端服务（后台运行）
+nohup node server.js > server.log 2>&1 &
+```
+
+**Nginx 反向代理配置：**
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    # 静态文件
+    location / {
+        root /path/to/cloth_demo/dist;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # API 反向代理
+    location /api/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        client_max_body_size 50M;
+        proxy_read_timeout 120s;  # 抠图可能需要较长时间
+    }
+}
+```
 
 ## 项目结构
 
 ```
 cloth_demo/
 ├── public/
-│   └── bg-removal-data/    # 抠图 AI 模型文件（约 200MB）
 ├── src/
 │   ├── components/
 │   │   ├── LeftPanel.vue       # 左侧衣服列表面板
@@ -62,6 +101,7 @@ cloth_demo/
 │   │   └── ControlSliders.vue  # 变换控制滑块
 │   ├── App.vue
 │   └── main.js
+├── server.js               # Express 后端服务（抠图 API）
 ├── model.png               # 默认模特图片
 ├── index.html
 ├── package.json
@@ -82,23 +122,25 @@ cloth_demo/
 
 ### 关于抠图功能
 
-抠图功能使用本地 AI 模型，首次加载需要读取约 40MB 模型文件。
+抠图功能在服务器端运行，使用 AI 模型自动移除背景并清理边缘碎屑。
 
-- 模型文件已包含在 `public/bg-removal-data/` 目录
-- 完全本地运行，无需联网，保护隐私
-- 处理一张图片约需 3-10 秒（取决于图片大小和设备性能）
+- **服务器端处理**：无需下载模型到浏览器，解决带宽问题
+- **智能后处理**：自动移除抠图后的小碎片，只保留主体
+- 处理一张图片约需 5-15 秒（取决于图片大小和服务器性能）
 
 ## 技术栈
 
 - **Vue 3** - 前端框架
 - **Vite** - 构建工具
+- **Express** - 后端服务框架
 - **vuedraggable** - 拖拽排序
-- **@imgly/background-removal** - AI 背景移除
+- **@imgly/background-removal-node** - 服务器端 AI 背景移除
+- **Sharp** - 图像后处理（移除碎片）
 
 ## 注意事项
 
-1. `public/bg-removal-data/` 目录包含约 200MB 的 AI 模型文件，Git 克隆时请耐心等待
-2. 如果不需要抠图功能，可删除该目录以减小项目体积
+1. 抠图功能需要启动后端服务（`npm start`）
+2. 服务器需要足够的内存（建议 2GB 以上）用于 AI 模型运行
 3. 建议使用 Chrome/Edge 等现代浏览器以获得最佳体验
 
 ## License
