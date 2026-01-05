@@ -49,29 +49,77 @@ npm start
 
 ### 生产环境部署
 
-抠图功能在服务器端运行，需要启动 Node.js 后端服务：
+生产环境建议将前端静态文件和后端服务分开部署。
 
-```bash
-# 安装依赖
-npm install
+#### 1. 目录结构
 
-# 构建前端
-npm run build
-
-# 启动后端服务（后台运行）
-nohup node server.js > server.log 2>&1 &
+```
+/usr/local/ai-image/
+├── cloth_demo_front/       # 前端静态文件
+│   └── dist/               # npm run build 产出
+└── cloth_demo_backend/     # 后端服务
+    ├── server.js
+    ├── package.json
+    ├── node_modules/
+    └── ...
 ```
 
-**Nginx 反向代理配置：**
+#### 2. 部署前端
+
+```bash
+# 本地构建
+npm run build
+
+# 上传 dist 目录到服务器
+scp -r dist root@your-server:/usr/local/ai-image/cloth_demo_front/
+```
+
+#### 3. 部署后端
+
+```bash
+# 上传后端代码到服务器
+scp server.js package.json package-lock.json root@your-server:/usr/local/ai-image/cloth_demo_backend/
+
+# 在服务器上安装依赖
+cd /usr/local/ai-image/cloth_demo_backend
+npm install --production
+```
+
+#### 4. 使用 PM2 管理服务（推荐）
+
+使用 PM2 可以保持服务稳定运行，自动重启崩溃的进程，并支持开机自启。
+
+```bash
+# 安装 PM2
+npm install -g pm2
+
+# 启动服务
+cd /usr/local/ai-image/cloth_demo_backend
+pm2 start server.js --name cloth-demo
+
+# 设置开机自启
+pm2 startup
+pm2 save
+
+# 常用命令
+pm2 list              # 查看所有进程
+pm2 logs cloth-demo   # 查看日志
+pm2 restart cloth-demo # 重启服务
+pm2 stop cloth-demo   # 停止服务
+```
+
+#### 5. Nginx 反向代理配置
+
+编辑 `/etc/nginx/sites-enabled/default`：
 
 ```nginx
 server {
     listen 80;
     server_name your-domain.com;
 
-    # 静态文件
+    # 前端静态文件
     location / {
-        root /path/to/cloth_demo/dist;
+        root /usr/local/ai-image/cloth_demo_front/dist;
         try_files $uri $uri/ /index.html;
     }
 
@@ -85,6 +133,34 @@ server {
         proxy_read_timeout 120s;  # 抠图可能需要较长时间
     }
 }
+```
+
+重新加载 Nginx 配置：
+
+```bash
+sudo systemctl reload nginx
+```
+
+#### 6. 故障排查
+
+如果遇到 502 错误，按以下步骤排查：
+
+```bash
+# 1. 检查后端服务是否运行
+pm2 list
+# 或
+ps aux | grep "node server" | grep -v grep
+
+# 2. 测试后端是否响应
+curl http://127.0.0.1:3000/api/health
+
+# 3. 查看服务日志
+pm2 logs cloth-demo
+# 或
+cat /usr/local/ai-image/cloth_demo_backend/server.log
+
+# 4. 如果服务未运行，重新启动
+pm2 restart cloth-demo
 ```
 
 ## 项目结构

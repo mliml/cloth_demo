@@ -31,6 +31,11 @@ const posY = computed({
   set: (val) => emit('update-transform', 'y', Number(val))
 })
 
+const split = computed({
+  get: () => props.selectedCloth?.transform.split ?? 0,
+  set: (val) => emit('update-transform', 'split', Number(val))
+})
+
 const isDisabled = computed(() => !props.selectedCloth)
 </script>
 
@@ -96,6 +101,21 @@ const isDisabled = computed(() => !props.selectedCloth)
           :disabled="isDisabled"
         />
       </div>
+
+      <div class="slider-item">
+        <label>
+          <span class="label-text">开合</span>
+          <span class="value-display">{{ split }}px</span>
+        </label>
+        <input
+          type="range"
+          v-model="split"
+          min="0"
+          max="200"
+          step="1"
+          :disabled="isDisabled"
+        />
+      </div>
     </div>
 
     <div class="hint" v-if="isDisabled">
@@ -117,7 +137,7 @@ const isDisabled = computed(() => !props.selectedCloth)
 
 .slider-group {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 16px;
 }
 

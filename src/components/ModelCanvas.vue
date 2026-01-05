@@ -29,10 +29,24 @@ const dragStartPos = ref({ x: 0, y: 0 })
 const dragStartTransform = ref({ x: 0, y: 0 })
 
 // 计算衣服样式 - 反转 z-index，让列表顶部的项目显示在最上层
-function getClothStyle(cloth, index) {
-  const { scale, rotation, x, y } = cloth.transform
+// half 参数: null=完整图片, 'left'=左半边, 'right'=右半边
+function getClothStyle(cloth, index, half = null) {
+  const { scale, rotation, x, y, split } = cloth.transform
+
+  let clipPath = 'none'
+  let extraX = 0
+
+  if (half === 'left') {
+    clipPath = 'inset(0 50% 0 0)'
+    extraX = -split / 2
+  } else if (half === 'right') {
+    clipPath = 'inset(0 0 0 50%)'
+    extraX = split / 2
+  }
+
   return {
-    transform: `translate(${x}px, ${y}px) scale(${scale}) rotate(${rotation}deg)`,
+    transform: `translate(${x + extraX}px, ${y}px) scale(${scale}) rotate(${rotation}deg)`,
+    clipPath,
     zIndex: visibleClothes.value.length - index
   }
 }
@@ -94,16 +108,37 @@ function handleMouseUp() {
       />
 
       <!-- 衣服图层 -->
-      <img
-        v-for="(cloth, index) in visibleClothes"
-        :key="cloth.id"
-        :src="cloth.imageUrl"
-        :alt="cloth.name"
-        class="cloth-image"
-        :class="{ selected: selectedClothId === cloth.id, dragging: isDragging && selectedClothId === cloth.id }"
-        :style="getClothStyle(cloth, index)"
-        @mousedown="handleMouseDown($event, cloth)"
-      />
+      <template v-for="(cloth, index) in visibleClothes" :key="cloth.id">
+        <!-- split=0 时显示完整图片 -->
+        <img
+          v-if="cloth.transform.split === 0"
+          :src="cloth.imageUrl"
+          :alt="cloth.name"
+          class="cloth-image"
+          :class="{ selected: selectedClothId === cloth.id, dragging: isDragging && selectedClothId === cloth.id }"
+          :style="getClothStyle(cloth, index)"
+          @mousedown="handleMouseDown($event, cloth)"
+        />
+        <!-- split>0 时显示左右两半 -->
+        <template v-else>
+          <img
+            :src="cloth.imageUrl"
+            :alt="cloth.name + ' 左'"
+            class="cloth-image cloth-half"
+            :class="{ selected: selectedClothId === cloth.id, dragging: isDragging && selectedClothId === cloth.id }"
+            :style="getClothStyle(cloth, index, 'left')"
+            @mousedown="handleMouseDown($event, cloth)"
+          />
+          <img
+            :src="cloth.imageUrl"
+            :alt="cloth.name + ' 右'"
+            class="cloth-image cloth-half"
+            :class="{ selected: selectedClothId === cloth.id, dragging: isDragging && selectedClothId === cloth.id }"
+            :style="getClothStyle(cloth, index, 'right')"
+            @mousedown="handleMouseDown($event, cloth)"
+          />
+        </template>
+      </template>
     </div>
   </div>
 </template>

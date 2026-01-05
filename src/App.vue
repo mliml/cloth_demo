@@ -31,7 +31,8 @@ function addCloth(imageUrl) {
       scale: 1,
       rotation: 0,
       x: 0,
-      y: 0
+      y: 0,
+      split: 0
     }
   }
   clothList.value.push(newCloth)
